@@ -2,6 +2,8 @@ import json
 import argparse
 from transformers import AutoTokenizer
 import numpy as np
+import os
+import sys
 
 
 def speed(jsonl_file, jsonl_file_base, tokenizer, task=None, report=True):
@@ -74,81 +76,110 @@ def get_single_speedup(jsonl_file, jsonl_file_base, tokenizer_path):
         speed(jsonl_file, jsonl_file_base, tokenizer_path, task=subtask_name)
 
 
-def get_mean_speedup():
-    tokenizer_path="/home/xiaheming/data/pretrained_models/Vicuna/vicuna-7b-v1.3/"
-    jsonl_file_name = "vicuna-7b-v1.3-samd.jsonl"
-    jsonl_file_base_name = "vicuna-7b-v1.3-vanilla-float16-temp-0.0.jsonl"
-    jsonl_file_run_list = [
-        "./data/spec_bench/model_answer_temp0_run_1/{}".format(jsonl_file_name),
-        "./data/spec_bench/model_answer_temp0_run_2/{}".format(jsonl_file_name),
-        "./data/spec_bench/model_answer_temp0_run_3/{}".format(jsonl_file_name),
-                           ]
-    jsonl_file_base_run_list = [
-        "./data/spec_bench/model_answer_temp0_run_1/{}".format(jsonl_file_base_name),
-        "./data/spec_bench/model_answer_temp0_run_2/{}".format(jsonl_file_base_name),
-        "./data/spec_bench/model_answer_temp0_run_3/{}".format(jsonl_file_base_name),
-                           ]
-
-    for subtask_name in ["mt_bench", "translation", "summarization", "qa", "math_reasoning", "rag", "overall"]:
-        print("=" * 30, "Task: ", subtask_name, "=" * 30)
-        tokens_per_second_list = []
-        tokens_per_second_baseline_list = []
-        speedup_ratio_list = []
-        accept_lengths_list = []
-        for jsonl_file, jsonl_file_base in zip(jsonl_file_run_list, jsonl_file_base_run_list):
-            tokens_per_second, tokens_per_second_baseline, speedup_ratio, accept_lengths = speed(jsonl_file, jsonl_file_base, tokenizer_path, task=subtask_name, report=False)
-            tokens_per_second_list.append(tokens_per_second)
-            tokens_per_second_baseline_list.append(tokens_per_second_baseline)
-            speedup_ratio_list.append(speedup_ratio)
-            accept_lengths_list.extend(accept_lengths)
-
-        avg_accept_lengths = np.mean(accept_lengths_list)
-        print("#Mean accepted tokens: {}".format(avg_accept_lengths))
-
-        avg = np.mean(tokens_per_second_list)
-        std = np.std(tokens_per_second_list, ddof=1)  # np.sqrt(( a.var() * a.size) / (a.size - 1))
-        print("Tokens per second: Mean result: {}, Std result: {}".format(avg, std))
-
-        avg_baseline = np.mean(tokens_per_second_baseline_list)
-        std_baseline = np.std(tokens_per_second_baseline_list, ddof=1)  # np.sqrt(( a.var() * a.size) / (a.size - 1))
-        print("Tokens per second (baseline): Mean result: {}, Std result: {}".format(avg_baseline, std_baseline))
-
-        avg_speedup = np.mean(speedup_ratio_list)
-        std_speedup = np.std(speedup_ratio_list, ddof=1)  # np.sqrt(( a.var() * a.size) / (a.size - 1))
-        print("Speedup ratio: Mean result: {}, Std result: {}".format(avg_speedup, std_speedup))
-        print("\n")
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--file-path",
-        default='./data/spec_bench/model_answer/vicuna-7b-v1.3-samd.jsonl',
+        "--folder",
+        default='./data/spec_bench/model_answer',
         type=str,
-        help="The file path of evaluated Speculative Decoding methods.",
+        help="The folder containing evaluated Speculative Decoding methods and baseline.",
     )
     parser.add_argument(
-        "--base-path",
-        default='./data/spec_bench/model_answer/vicuna-7b-v1.3-vanilla-float16-temp-0.0.jsonl',
+        "--tokenizer",
+        default='lmsys/vicuna-13b-v1.3',
         type=str,
-        help="The file path of evaluated baseline.",
+        help="The tokenizer used for evaluation.",
     )
-    parser.add_argument(
-        "--tokenizer-path",
-        default='/home/xiaheming/data/pretrained_models/Vicuna/vicuna-7b-v1.3',
-        type=str,
-        help="The file path of evaluated baseline.",
-    )
-    parser.add_argument(
-        "--mean-report",
-        action="store_true",
-        default=True,
-        help="report mean speedup over different runs")
 
     args = parser.parse_args()
-    if args.mean_report:
-        get_mean_speedup()
-    else:
-        get_single_speedup(jsonl_file=args.file_path, jsonl_file_base=args.base_path, tokenizer_path=args.tokenizer_path)
+
+    os.chdir(os.path.dirname(os.path.dirname(__file__)))
+
+    files = [f for f in os.listdir(args.folder) if os.path.isfile(os.path.join(args.folder, f)) and f.endswith('.jsonl')]
+    vanilla_files = [f for f in files if 'vanilla' in f]
+    if len(vanilla_files) != 1:
+        print(f"Error: Expected exactly one file containing 'vanilla' in the name, found {len(vanilla_files)}: {vanilla_files}")
+        sys.exit(1)
+    vanilla_path = os.path.join(args.folder, vanilla_files[0])
+
+    # Subtasks to evaluate
+    subtasks = ["mt_bench", "translation", "summarization", "qa", "math_reasoning", "rag", "overall"]
+
+    # Collect results
+    results = {}
+    mean_accepted_tokens = {}
+
+    # Baseline: speedup is always 1.0, need to compute mean accepted tokens
+    _, _, _, accept_lengths_list = speed(
+        jsonl_file=vanilla_path,
+        jsonl_file_base=vanilla_path,
+        tokenizer=args.tokenizer,
+        task="overall",
+        report=False
+    )
+    results[vanilla_files[0]] = {subtask: 1.0 for subtask in subtasks}
+    mean_accepted_tokens[vanilla_files[0]] = float(np.mean(accept_lengths_list))
+
+    # Evaluate each system
+    for f in files:
+        if f == vanilla_files[0]:
+            continue
+        file_path = os.path.join(args.folder, f)
+        results[f] = {}
+        for subtask in subtasks:
+            _, _, speedup_ratio, accept_lengths_list = speed(
+                jsonl_file=file_path,
+                jsonl_file_base=vanilla_path,
+                tokenizer=args.tokenizer,
+                task=subtask,
+                report=False
+            )
+            results[f][subtask] = speedup_ratio
+            if subtask == "overall":
+                mean_accepted_tokens[f] = float(np.mean(accept_lengths_list))
+
+    # Sort systems by descending overall speedup
+    sorted_systems = sorted(results.items(), key=lambda x: x[1]["overall"], reverse=True)
+
+    # Find common prefix for all .jsonl files
+    def common_prefix(strings):
+        if not strings:
+            return ''
+        s1 = min(strings)
+        s2 = max(strings)
+        for i, c in enumerate(s1):
+            if i >= len(s2) or c != s2[i]:
+                return s1[:i]
+        return s1
+    file_prefix = common_prefix([f for f in files])
+
+    def clean_system_name(filename):
+        # Remove prefix
+        name = filename[len(file_prefix):] if filename.startswith(file_prefix) else filename
+        # Remove everything from first hyphen
+        hyphen_idx = name.find('-')
+        if hyphen_idx != -1:
+            name = name[:hyphen_idx]
+        # Remove .jsonl extension if present
+        if name.endswith('.jsonl'):
+            name = name[:-6]
+        return name
+
+    # Print markdown table
+    header = "| System | #Mean Accepted Tokens | " + " | ".join(subtasks) + " |"
+    sep = "|---" * (len(subtasks) + 2) + "|"
+    table_lines = []
+    table_lines.append("\nMarkdown Table of Speedup Ratios:\n")
+    table_lines.append(header)
+    table_lines.append(sep)
+    for system, subtask_dict in sorted_systems:
+        system_name = clean_system_name(system)
+        row = f"| {system_name} | {mean_accepted_tokens[system]:.2f} | " + " | ".join(f"{subtask_dict[subtask]:.3f}" for subtask in subtasks) + " |"
+        table_lines.append(row)
+
+    # Save to markdown file in the input folder
+    output_path = os.path.join(args.folder, "speedup_table.md")
+    with open(output_path, "w") as f:
+        f.write("\n".join(table_lines) + "\n")
+    print(f"\nMarkdown table saved to {output_path}\n")
