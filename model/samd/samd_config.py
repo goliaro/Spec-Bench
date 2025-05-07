@@ -89,6 +89,10 @@ def load_eagle(tree_model_path: str, tree_path: Optional[str] = None):
 
 
 def load_eagle2(tree_model_path: str):
+    from huggingface_hub import hf_hub_download
+    if not os.path.exists(tree_model_path):
+        file_path = hf_hub_download(repo_id=tree_model_path, filename="config.json")
+        tree_model_path = os.path.dirname(file_path)
     with open(os.path.join(tree_model_path, "config.json")) as f:
         tree_config = json.load(f)
     return tree_config

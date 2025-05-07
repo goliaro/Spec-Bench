@@ -485,8 +485,12 @@ class Model(nn.Module):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.lm_head=nn.Linear(config.hidden_size,config.draft_vocab_size,bias=False)
         if load_emb and not hasattr(config, "target_hidden_size"):
+            from huggingface_hub import hf_hub_download
             from safetensors import safe_open
             import json
+            if not os.path.exists(path):
+                file_path = hf_hub_download(repo_id=path, filename="config.json")
+                path = os.path.dirname(file_path)
             try:
                 with open(os.path.join(path, "model.safetensors.index.json"), "r") as f:
                     index_json = json.loads(f.read())

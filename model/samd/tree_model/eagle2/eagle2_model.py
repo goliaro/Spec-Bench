@@ -659,6 +659,10 @@ class Eagle2Model(nn.Module):
     def load_weight(self, path: str):
         print("load eagle2 model...")
         start = time.perf_counter()
+        if not os.path.exists(path):
+            from huggingface_hub import hf_hub_download
+            file_path = hf_hub_download(repo_id=path, filename="config.json")
+            path = os.path.dirname(file_path)
         path = os.path.join(path, "pytorch_model.bin")
         state_dict = torch.load(path)
         self.load_state_dict(state_dict)
