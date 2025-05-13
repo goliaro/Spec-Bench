@@ -10,3 +10,4 @@ protobuf
 datasets
 maturin
 patchelf
+einops

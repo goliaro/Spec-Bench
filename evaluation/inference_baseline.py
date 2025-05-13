@@ -13,8 +13,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 def baseline_forward(inputs, model, tokenizer, max_new_tokens, temperature=0.0, do_sample=False):
     input_ids = inputs.input_ids
+    attention_mask = inputs.attention_mask
     output_ids = model.generate(
         input_ids,
+        attention_mask=attention_mask,
         do_sample=do_sample,
         temperature=temperature,
         max_new_tokens=max_new_tokens,

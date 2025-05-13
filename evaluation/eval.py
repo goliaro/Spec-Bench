@@ -92,17 +92,14 @@ def get_model_answers(
     # warmup
     for _ in range(3):
         torch.manual_seed(0)
-        conv = get_conversation_template("vicuna")
         turns = []
         steps = []
         new_tokens = []
         wall_time = []
         for j in range(len(question["turns"])):
             qs = question["turns"][j]
-            conv.append_message(conv.roles[0], qs)
-            conv.append_message(conv.roles[1], None)
-            conv.stop_str = "</s>"
-            prompt = conv.get_prompt()
+            messages = [{"role": "user", "content": qs}]
+            prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
             inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
             input_ids = inputs.input_ids
             try:
@@ -119,11 +116,12 @@ def get_model_answers(
                 total_time = time.time() - start_time
                 output_ids = output_ids[0][len(input_ids[0]):]
                 # be consistent with the template's stop_token_ids
-                if conv.stop_token_ids:
+                stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.eos_token)
+                if stop_token_ids:
                     stop_token_ids_index = [
                         i
                         for i, id in enumerate(output_ids)
-                        if id in conv.stop_token_ids
+                        if id == stop_token_ids
                     ]
                     if len(stop_token_ids_index) > 0:
                         output_ids = output_ids[: stop_token_ids_index[0]]
@@ -132,8 +130,9 @@ def get_model_answers(
                     output_ids,
                     spaces_between_special_tokens=False,
                 )
-                if conv.stop_str and output.find(conv.stop_str) > 0:
-                    output = output[: output.find(conv.stop_str)]
+                # Remove any EOS token from the output
+                if tokenizer.eos_token and output.find(tokenizer.eos_token) > 0:
+                    output = output[: output.find(tokenizer.eos_token)]
                 for special_token in tokenizer.special_tokens_map.values():
                     if isinstance(special_token, list):
                         for special_tok in special_token:
@@ -141,9 +140,6 @@ def get_model_answers(
                     else:
                         output = output.replace(special_token, "")
                 output = output.strip()
-
-                if conv.name == "xgen" and output.startswith("Assistant:"):
-                    output = output.replace("Assistant:", "", 1).strip()
             except RuntimeError as e:
                 print("ERROR question ID: ", question["question_id"])
                 output = "ERROR"
@@ -152,7 +148,8 @@ def get_model_answers(
             steps.append(int(step))
             new_tokens.append(int(new_token))
             wall_time.append(total_time)
-            conv.messages[-1][-1] = output
+            # Add the assistant's response to messages for the next turn
+            messages.append({"role": "assistant", "content": output})
     print('Warmup done')
 
     accept_lengths_tree = []
@@ -162,17 +159,15 @@ def get_model_answers(
         for i in range(num_choices):
             cur_accept_lengths_tree = []
             torch.manual_seed(i)
-            conv = get_conversation_template("vicuna")
             turns = []
             steps = []
             new_tokens = []
             wall_time = []
+            messages = []
             for j in range(len(question["turns"])):
                 qs = question["turns"][j]
-                conv.append_message(conv.roles[0], qs)
-                conv.append_message(conv.roles[1], None)
-                conv.stop_str = "</s>"
-                prompt = conv.get_prompt()
+                messages.append({"role": "user", "content": qs})
+                prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
                 inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
                 input_ids = inputs.input_ids
                 try:
@@ -190,11 +185,12 @@ def get_model_answers(
                     accept_lengths_tree.extend(accept_length_tree)
                     output_ids = output_ids[0][len(input_ids[0]):]
 
-                    if conv.stop_token_ids:
+                    stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.eos_token)
+                    if stop_token_ids:
                         stop_token_ids_index = [
                             i
                             for i, id in enumerate(output_ids)
-                            if id in conv.stop_token_ids
+                            if id == stop_token_ids
                         ]
                         if len(stop_token_ids_index) > 0:
                             output_ids = output_ids[: stop_token_ids_index[0]]
@@ -203,8 +199,8 @@ def get_model_answers(
                         output_ids,
                         spaces_between_special_tokens=False,
                     )
-                    if conv.stop_str and output.find(conv.stop_str) > 0:
-                        output = output[: output.find(conv.stop_str)]
+                    if tokenizer.eos_token and output.find(tokenizer.eos_token) > 0:
+                        output = output[: output.find(tokenizer.eos_token)]
                     for special_token in tokenizer.special_tokens_map.values():
                         if isinstance(special_token, list):
                             for special_tok in special_token:
@@ -212,9 +208,6 @@ def get_model_answers(
                         else:
                             output = output.replace(special_token, "")
                     output = output.strip()
-
-                    if conv.name == "xgen" and output.startswith("Assistant:"):
-                        output = output.replace("Assistant:", "", 1).strip()
                 except RuntimeError as e:
                     print("ERROR question ID: ", question["question_id"])
                     output = "ERROR"
@@ -224,7 +217,7 @@ def get_model_answers(
                 new_tokens.append(int(new_token))
                 wall_time.append(total_time)
                 cur_accept_lengths_tree.extend(accept_length_tree)
-                conv.messages[-1][-1] = output
+                messages.append({"role": "assistant", "content": output})
             # torch.cuda.empty_cache()
             choices.append({"index": i, "turns": turns, "decoding_steps": steps, "new_tokens": new_tokens, "wall_time": wall_time,
                             "accept_lengths": cur_accept_lengths_tree})

@@ -3,6 +3,8 @@ from transformers import (
     AutoTokenizer,
     AutoConfig,
     GenerationConfig,
+    # BitsAndBytesConfig,
+    FineGrainedFP8Config
 )
 
 model_name = "meta-llama/Llama-3.3-70B-Instruct"
@@ -11,9 +13,13 @@ max_length = 1024
 import time
 
 start_time = time.time()
-model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, device_map="auto",)
+# quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+# model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, device_map="auto", quantization_config=quantization_config)
+quantization_config = FineGrainedFP8Config()
+quantized_model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True, device_map="auto", quantization_config=quantization_config)
 end_time = time.time()
 print(f"Model loading time: {end_time - start_time:.2f} seconds")
+print(f"Model footprint: {model.get_memory_footprint() / 1024 / 1024 / 1024 :.2f} GB")
 
 hf_config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
 tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)

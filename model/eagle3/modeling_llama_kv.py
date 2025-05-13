@@ -26,44 +26,13 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
 )
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers import LlamaConfig
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
 
-# Add local implementation of RoPE initialization functions
-def _init_rope_default(config, device, **kwargs):
-    dim = kwargs.get("dim", config.hidden_size // config.num_attention_heads)
-    base = kwargs.get("base", 10000)
-    max_position_embeddings = kwargs.get("max_position_embeddings", config.max_position_embeddings)
-    
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-    return inv_freq, 1.0
-
-def _init_rope_linear(config, device, **kwargs):
-    dim = kwargs.get("dim", config.hidden_size // config.num_attention_heads)
-    base = kwargs.get("base", 10000)
-    max_position_embeddings = kwargs.get("max_position_embeddings", config.max_position_embeddings)
-    factor = kwargs.get("factor", 1.0)
-    
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-    return inv_freq, factor
-
-def _init_rope_dynamic(config, device, **kwargs):
-    dim = kwargs.get("dim", config.hidden_size // config.num_attention_heads)
-    base = kwargs.get("base", 10000)
-    max_position_embeddings = kwargs.get("max_position_embeddings", config.max_position_embeddings)
-    factor = kwargs.get("factor", 1.0)
-    
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-    return inv_freq, factor
-
-ROPE_INIT_FUNCTIONS = {
-    "default": _init_rope_default,
-    "linear": _init_rope_linear,
-    "dynamic": _init_rope_dynamic,
-}
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
@@ -1037,7 +1006,7 @@ class LlamaModel(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart._prepare_decoder_attention_mask
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(
             self, attention_mask, input_shape, inputs_embeds, past_key_values_length
     ):
