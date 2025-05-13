@@ -1,7 +1,9 @@
 import torch, math, time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+from torch.nn import CrossEntropyLoss
 from transformers.cache_utils import Cache, DynamicCache
-from transformers.models.llama.modeling_llama import BaseModelOutputWithPast, CausalLMOutputWithPast, _expand_mask
+from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
+from transformers.models.llama.modeling_llama import BaseModelOutputWithPast, CausalLMOutputWithPast
 
 def j_make_causal_mask_multilevel(
     level_sizes: list,is_prefill:bool, WINDOW_SIZE: int, guess : list, guess_size: int, not_seq:bool, continue_all:bool,input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
@@ -117,7 +119,7 @@ def j_prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_e
     if attention_mask is not None:
         
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
+        expanded_attn_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
             inputs_embeds.device
         )
         #print("shape: ", expanded_attn_mask.size(), combined_attention_mask.size())
@@ -146,6 +148,7 @@ def LlamaModeljforward(
     not_seq: bool=False,
     continue_all: bool=False,
     guess: Optional[torch.Tensor] = None,
+    cache_position: Optional[torch.LongTensor] = None,
 ) -> Union[Tuple, BaseModelOutputWithPast]:
     
     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -175,6 +178,14 @@ def LlamaModeljforward(
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
         past_key_values_length = past_key_values.get_usable_length(seq_length)
 
+    # Set up cache_position for compatibility with newer transformer version
+    cache_position = None
+    if past_key_values is not None:
+        past_seen_tokens = past_key_values.get_seq_length()
+        cache_position = torch.arange(
+            past_seen_tokens, past_seen_tokens + seq_length, device=input_ids.device if input_ids is not None else inputs_embeds.device
+        )
+
     if position_ids is None:
         device = input_ids.device if input_ids is not None else inputs_embeds.device
         position_ids = torch.arange(
@@ -197,6 +208,9 @@ def LlamaModeljforward(
             padding_mask = attention_mask
         else:
             padding_mask = None
+
+    # Create position embeddings for compatibility with newer transformer version
+    position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
     attention_mask = self.j_prepare_decoder_attention_mask(
         attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length, (WINDOWS_SIZE, is_prefill, guess, guess_size, not_seq, continue_all, level_sizes), 
@@ -229,21 +243,27 @@ def LlamaModeljforward(
                     past_key_values,
                     output_attentions,
                     use_cache,
+                    cache_position,
+                    position_embeddings,
                 )
         else:
-            layer_outputs = decoder_layer.forward(
+            layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
             )
 
         hidden_states = layer_outputs[0]
 
         if use_cache:
-            next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+            # In the newer transformers version, past_key_value is handled differently
+            # The next_decoder_cache is updated directly in place through past_key_values
+            next_decoder_cache = past_key_values
 
         if output_attentions:
             all_self_attns += (layer_outputs[1],)
@@ -287,7 +307,7 @@ def jforward_multilevel(
     output_attentions: Optional[bool] = None,
     output_hidden_states: Optional[bool] = None,
     return_dict: Optional[bool] = None,
-    
+    cache_position: Optional[torch.LongTensor] = None,
 ) -> Union[Tuple, CausalLMOutputWithPast]:
     r"""
     Args:
@@ -331,8 +351,11 @@ def jforward_multilevel(
         assert guess_size == level - 1
     
     if past_key_values is not None:
-        past_size = past_key_values[0][0].size(2)
-        #assert past_size == attention_mask.size(1) - 1
+        past_size = 0
+        if isinstance(past_key_values, Cache):
+            past_size = past_key_values.get_seq_length()
+        else:
+            past_size = past_key_values[0][0].size(2)
     else:
         past_size = 0
     #print("past: ", past_size, )
@@ -395,7 +418,8 @@ def jforward_multilevel(
         level_sizes=level_sizes,
         guess_size=guess_size,
         not_seq=not_seq,
-        guess=guess_tokens
+        guess=guess_tokens,
+        cache_position=cache_position,
     )
     #print("done fwd")
     hidden_states = outputs[0]

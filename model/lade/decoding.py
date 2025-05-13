@@ -181,6 +181,10 @@ def jacobi_greedy_search_multilevel(
     # keep track of which sequences are already finished
     unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
+    # Initialize cache_position for the new transformers version
+    if "cache_position" not in model_kwargs:
+        model_kwargs["cache_position"] = torch.arange(input_ids.shape[1], device=input_ids.device)
+
     this_peer_finished = False  # used by synced_gpus only
     ############### configurations 
     WINDOW_SIZE = CONFIG_MAP.get("WINDOW_SIZE", 60)
@@ -265,6 +269,10 @@ def jacobi_greedy_search_multilevel(
         else:
             guess_tokens = None
         
+        # Filter out unexpected keyword arguments
+        allowed_args = {'input_ids', 'attention_mask', 'position_ids', 'past_key_values', 'inputs_embeds', 'use_cache', 'output_attentions', 'output_hidden_states', 'return_dict', 'cache_position'}
+        filtered_model_inputs = {k: v for k, v in model_inputs.items() if k in allowed_args}
+        
         #print("len: ", model_inputs.keys(), return_dict_in_generate, logits_processor, len(logits_processor), len(guess_tokens) if guess_tokens is not None else None, guess_tokens)
         assert return_dict_in_generate == False
         assert len(logits_processor) == 0
@@ -273,7 +281,7 @@ def jacobi_greedy_search_multilevel(
 
 
         outputs = self.jforward_multilevel(
-            **model_inputs,
+            **filtered_model_inputs,
             past_tokens=past_tokens,
             guess_tokens=guess_tokens,
             return_dict=True,
@@ -307,7 +315,11 @@ def jacobi_greedy_search_multilevel(
         # finished sentences should have their next token be a padding token
         if eos_token_id is not None:
             if pad_token_id is None:
-                raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                # If pad_token_id is not defined, use eos_token_id as pad_token_id
+                pad_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
+            elif isinstance(pad_token_id, list):
+                pad_token_id = pad_token_id[0]
+                
             next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
         
         max_hit = 0 
@@ -747,7 +759,11 @@ def greedy_search_chat(
         # finished sentences should have their next token be a padding token
         if eos_token_id is not None:
             if pad_token_id is None:
-                raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                # If pad_token_id is not defined, use eos_token_id as pad_token_id
+                pad_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
+            elif isinstance(pad_token_id, list):
+                pad_token_id = pad_token_id[0]
+                
             next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
         all_old_tokens.append(next_tokens.item())

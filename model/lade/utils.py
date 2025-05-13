@@ -38,8 +38,8 @@ def augment_llama():
     modeling_llama.LlamaModel.j_prepare_decoder_attention_mask = llama.j_prepare_decoder_attention_mask    
 
 def augment_generate():
-    FUNC_MAP["greedy_search"] = GenerationMixin.greedy_search
-    GenerationMixin.greedy_search = greedy_search_proxy
+    FUNC_MAP["greedy_search"] = GenerationMixin._sample
+    GenerationMixin._sample = greedy_search_proxy
 
     #FUNC_MAP["sample"] = GenerationMixin.sample
     #GenerationMixin.sample = sample_proxy
