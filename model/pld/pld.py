@@ -104,7 +104,9 @@ def greedy_search_pld(
         attention_mask = candidate_kwargs["attention_mask"]
         mask_extension_length = candidate_input_ids.shape[1] - attention_mask.shape[1]
         candidate_kwargs["attention_mask"] = torch.cat([attention_mask, attention_mask.new_ones((attention_mask.shape[0], mask_extension_length))], dim=-1,)
-
+        candidate_kwargs = self._get_initial_cache_position(candidate_input_ids, candidate_kwargs)
+        # print("candidate_input_ids", candidate_input_ids)
+        # print("candidate_kwargs", candidate_kwargs)
         model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
 
         # forward pass to get next token
@@ -114,10 +116,24 @@ def greedy_search_pld(
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
+        # print()
+        # print("candidate_input_ids", candidate_input_ids)
+        # print("candidate_input_ids.shape", candidate_input_ids.shape)
+
+        # print("model_inputs", model_inputs)
+        # # print("model_inputs.shape", model_inputs.shape)
+        # print("outputs.logits.shape", outputs.logits.shape)
+        # print("candidate_length", candidate_length)
 
         new_logits = outputs.logits[:, -candidate_length - 1:]  # excludes the input prompt if present
         selected_tokens = new_logits.argmax(dim=-1)
         candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
+        # print("selected_tokens", selected_tokens)
+        # print("selected_tokens.shape", selected_tokens.shape)
+        # print("candidate_new_tokens", candidate_new_tokens)
+        # print("candidate_new_tokens.shape", candidate_new_tokens.shape)
+        # print("--------------------------------")
+        
         n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
 
         n_matches = min(n_matches, max_len - cur_len - 1)

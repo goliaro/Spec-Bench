@@ -143,6 +143,7 @@ def get_model_answers(
             except RuntimeError as e:
                 print("ERROR question ID: ", question["question_id"])
                 output = "ERROR"
+                raise e
 
             turns.append(output)
             steps.append(int(step))
@@ -211,6 +212,7 @@ def get_model_answers(
                 except RuntimeError as e:
                     print("ERROR question ID: ", question["question_id"])
                     output = "ERROR"
+                    raise e
 
                 turns.append(output)
                 steps.append(int(step))
