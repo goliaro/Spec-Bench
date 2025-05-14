@@ -10,8 +10,8 @@ from transformers.models.llama.modeling_llama import (
     AttentionMaskConverter,
     BaseModelOutputWithPast,
     logger,
-    CrossEntropyLoss,
 )
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from typing import Optional, Tuple, Union, List
 
 from ..samd_config import ForwardType
