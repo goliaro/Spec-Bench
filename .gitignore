@@ -175,3 +175,8 @@ cython_debug/
 
 datastore_chat_large.idx
 model_answer/
+
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+Makefile
