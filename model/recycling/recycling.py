@@ -60,10 +60,23 @@ class TokenRecycling:
         self.relative_position_ids = torch.tensor(self.get_relative_position_ids(self.tree_template), dtype=torch.long, device=self.device)[1:]
         self.tree_attention_mask = self.get_tree_attention_mask(self.tree_template, device=self.device).bool()[1:, 1:]
 
+    def eval(self):
+        """
+        Set the model to evaluation mode.
+        """
+        self.model.eval()
+    
+    @property
+    def training(self):
+        """
+        Check if the model is in training mode.
+        """
+        return self.model.training
+
     @torch.no_grad()
     def generate(self,
         prompt: Union[str, torch.Tensor],
-        max_new_tokens=150,
+        max_new_tokens=1024,
         hot_start=False,
         silent=False,
         stop_on_eos=True,
@@ -71,6 +84,8 @@ class TokenRecycling:
         """
         Generate text using token recycling method.
         """
+        # print(type(prompt))
+        # print(prompt)
         input_ids = prompt.to(device=self.device) if isinstance(prompt, torch.Tensor) else \
              cast(torch.Tensor, self.tokenizer(prompt, return_tensors="pt").to(self.device).input_ids)
         prompt_length = input_ids.shape[-1]

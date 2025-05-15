@@ -4,6 +4,7 @@ Usage:
 python3 gen_model_answer.py --model-path lmsys/fastchat-t5-3b-v1.0 --model-id fastchat-t5-3b-v1.0
 """
 import argparse
+import os
 from fastchat.utils import str_to_torch_dtype
 
 from evaluation.eval import run_eval, reorg_answer_file
@@ -14,7 +15,7 @@ from model.eagle.utils import *
 from model.eagle.choices import *
 
 
-def ea_forward(inputs, model, tokenizer, max_new_tokens, tree_choices=None, logits_processor=None, max_steps=512):
+def ea_forward(inputs, model, tokenizer, max_new_tokens, tree_choices=None, logits_processor=None, max_steps=8192):
     input_ids = inputs.input_ids
     assert input_ids.shape[0] == 1, "Only support batch size 1 for now!!"
     # Avoid modifying the input_ids in-place
@@ -109,8 +110,8 @@ def ea_forward(inputs, model, tokenizer, max_new_tokens, tree_choices=None, logi
             break
         if new_token > max_new_tokens:
             break
-        if input_ids.shape[1] > 1960:
-            break
+        # if input_ids.shape[1] > 1960:
+        #     break
     return input_ids, new_token, idx+1, accept_length_list
 
 
@@ -152,7 +153,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-steps",
         type=int,
-        default=512,
+        default=8192,
         help="The maximum number of new generated tokens.",
     )
     parser.add_argument(
@@ -187,18 +188,29 @@ if __name__ == "__main__":
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
     )
+    parser.add_argument(
+        "--partition-name",
+        type=str,
+        default="",
+        help="The partition of the dataset to use.",
+    )
 
     args = parser.parse_args()
 
     args.model_id = args.model_id + "-temperature-" + str(args.temperature)
     args.tree_choices = eval(args.tree_choices)
 
-    question_file = f"data/{args.bench_name}/question.jsonl"
+    question_folder = f"data/{args.bench_name}"
+    question_filename = "question.jsonl"
+    if args.partition_name != "":
+        question_filename = f"eval_{args.partition_name}.jsonl"
+    question_file = os.path.join(question_folder, question_filename)
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
-
+        partition_prefix = f"{args.partition_name + '_' if len(args.partition_name) > 0 else ''}"
+        answer_file = f"data/{args.bench_name}/model_answer/{partition_prefix}{args.model_id}.jsonl"
+    print("Loading question file:", question_file)
     print(f"Output to {answer_file}")
 
     model = EaModel.from_pretrained(

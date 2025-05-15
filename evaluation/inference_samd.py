@@ -4,6 +4,7 @@ Usage:
 python3 gen_model_answer.py --model-path lmsys/fastchat-t5-3b-v1.0 --model-id fastchat-t5-3b-v1.0
 """
 import argparse
+import os
 import torch
 from fastchat.utils import str_to_torch_dtype
 from evaluation.eval import run_eval, reorg_answer_file
@@ -120,18 +121,28 @@ if __name__ == "__main__":
         type=str,
         default=None
     )
+    parser.add_argument(
+        "--partition-name",
+        type=str,
+        default="",
+        help="The partition of the dataset to use.",
+    )
     parser.add_argument("--tree_method", type=str, default=None, choices=["token_recycle", "eagle2"])
     parser.add_argument("--tree_model_path", type=str, default="path/to/EAGLE-Vicuna-7B-v1.3")
     parser.add_argument("--attn_implementation", type=str, default="sdpa")
     args = parser.parse_args()
 
-    question_file = f"data/{args.bench_name}/question.jsonl"
-
+    question_folder = f"data/{args.bench_name}"
+    question_filename = "question.jsonl"
+    if args.partition_name != "":
+        question_filename = f"eval_{args.partition_name}.jsonl"
+    question_file = os.path.join(question_folder, question_filename)
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
-
+        partition_prefix = f"{args.partition_name + '_' if len(args.partition_name) > 0 else ''}"
+        answer_file = f"data/{args.bench_name}/model_answer/{partition_prefix}{args.model_id}.jsonl"
+    print("Loading question file:", question_file)
     print(f"Output to {answer_file}")
     
     if args.num_gpus_total == 1:

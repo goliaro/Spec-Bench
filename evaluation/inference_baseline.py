@@ -4,6 +4,7 @@ Usage:
 python3 gen_model_answer.py --model-path lmsys/fastchat-t5-3b-v1.0 --model-id fastchat-t5-3b-v1.0
 """
 import argparse
+import os
 from fastchat.utils import str_to_torch_dtype
 
 from evaluation.eval import run_eval, reorg_answer_file
@@ -86,16 +87,26 @@ if __name__ == "__main__":
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
     )
+    parser.add_argument(
+        "--partition-name",
+        type=str,
+        default="",
+        help="The partition of the dataset to use.",
+    )
 
     args = parser.parse_args()
-
-    question_file = f"data/{args.bench_name}/question.jsonl"
-
+    
+    question_folder = f"data/{args.bench_name}"
+    question_filename = "question.jsonl"
+    if args.partition_name != "":
+        question_filename = f"eval_{args.partition_name}.jsonl"
+    question_file = os.path.join(question_folder, question_filename)
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
-
+        partition_prefix = f"{args.partition_name + '_' if len(args.partition_name) > 0 else ''}"
+        answer_file = f"data/{args.bench_name}/model_answer/{partition_prefix}{args.model_id}.jsonl"
+    print("Loading question file:", question_file)
     print(f"Output to {answer_file}")
 
     model = AutoModelForCausalLM.from_pretrained(

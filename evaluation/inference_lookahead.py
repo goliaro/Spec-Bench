@@ -97,6 +97,12 @@ if __name__ == "__main__":
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
     )
+    parser.add_argument(
+        "--partition-name",
+        type=str,
+        default="",
+        help="The partition of the dataset to use.",
+    )
 
     args = parser.parse_args()
     if int(os.environ.get("USE_LADE", 0)):
@@ -105,11 +111,18 @@ if __name__ == "__main__":
                          USE_FLASH=0, DIST_WORKERS=len(os.environ.get("CUDA_VISIBLE_DEVICES").split(",")))
         print("lade activated config: ", CONFIG_MAP)
 
-    question_file = f"data/{args.bench_name}/question.jsonl"
+    question_folder = f"data/{args.bench_name}"
+    question_filename = "question.jsonl"
+    if args.partition_name != "":
+        question_filename = f"eval_{args.partition_name}.jsonl"
+    question_file = os.path.join(question_folder, question_filename)
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
+        partition_prefix = f"{args.partition_name + '_' if len(args.partition_name) > 0 else ''}"
+        answer_file = f"data/{args.bench_name}/model_answer/{partition_prefix}{args.model_id}.jsonl"
+    print("Loading question file:", question_file)
+    print(f"Output to {answer_file}")
 
     print(f"Output to {answer_file}")
 

@@ -4,27 +4,18 @@ Usage:
 python3 gen_model_answer.py --model-path lmsys/fastchat-t5-3b-v1.0 --model-id fastchat-t5-3b-v1.0
 """
 import argparse
+import os
 from fastchat.utils import str_to_torch_dtype
 from model.recycling.recycling import TokenRecycling, Outputs
 from evaluation.eval import run_eval, reorg_answer_file
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
-def recycling_forward(inputs, model, tokenizer, max_new_tokens, temperature=0.0, do_sample=False):
-    input_ids = inputs.input_ids
-    attention_mask = inputs.attention_mask
-    output_ids = model.generate(
-        input_ids,
-        attention_mask=attention_mask,
-        do_sample=do_sample,
-        temperature=temperature,
-        max_new_tokens=max_new_tokens,
-    )
-    new_token = len(output_ids[0][len(input_ids[0]):])
-    step = new_token
-    accept_length_list = [1] * new_token
-    return output_ids, new_token, step, accept_length_list
+def recycling_forward(inputs, recycler, tokenizer, max_new_tokens, temperature=0.0, do_sample=False):
+    outputs = recycler.generate(prompt=inputs.input_ids, max_new_tokens=max_new_tokens, hot_start=False, silent=True, stop_on_eos=True)
+    accept_length_list = [len(seq) for seq in outputs.accepted_sequences]
+    num_accepted_tokens = sum(accept_length_list)
+    num_steps = outputs.total_steps
+    return outputs.output_ids, num_accepted_tokens, num_steps, accept_length_list
 
 
 if __name__ == "__main__":
@@ -86,25 +77,36 @@ if __name__ == "__main__":
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
     )
+    parser.add_argument(
+        "--partition-name",
+        type=str,
+        default="",
+        help="The partition of the dataset to use.",
+    )
 
     args = parser.parse_args()
 
     question_file = f"data/{args.bench_name}/question.jsonl"
 
+    question_folder = f"data/{args.bench_name}"
+    question_filename = "question.jsonl"
+    if args.partition_name != "":
+        question_filename = f"eval_{args.partition_name}.jsonl"
+    question_file = os.path.join(question_folder, question_filename)
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
-
+        partition_prefix = f"{args.partition_name + '_' if len(args.partition_name) > 0 else ''}"
+        answer_file = f"data/{args.bench_name}/model_answer/{partition_prefix}{args.model_id}.jsonl"
+    print("Loading question file:", question_file)
     print(f"Output to {answer_file}")
 
-    model = TokenRecycling.from_pretrained(
+    recycler = TokenRecycling.from_pretrained(
         args.model_path,
         torch_dtype=str_to_torch_dtype(args.dtype),
         low_cpu_mem_usage=True,
         device_map="auto",
     )
-    tokenizer = model.tokenizer
 
     if args.temperature > 0:
         do_sample = True
@@ -112,8 +114,8 @@ if __name__ == "__main__":
         do_sample = False
 
     run_eval(
-        model=model,
-        tokenizer=tokenizer,
+        model=recycler,
+        tokenizer=recycler.tokenizer,
         forward_func=recycling_forward,
         model_id=args.model_id,
         question_file=question_file,

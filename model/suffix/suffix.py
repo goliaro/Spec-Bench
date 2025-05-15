@@ -10,7 +10,8 @@ from transformers.utils import ModelOutput
 from transformers.generation.logits_process import LogitsProcessorList
 from transformers.generation.stopping_criteria import StoppingCriteriaList
 from transformers.generation.utils import _crop_past_key_values
-
+import json
+from transformers import AutoTokenizer
 
 @dataclass
 class SuffixSpecResult:
@@ -47,11 +48,14 @@ class SuffixSpecResult:
 
 class SuffixCache:
     
-    def __init__(self, max_depth: int = 64):
+    def __init__(self, max_depth: int = 64, training_file: Optional[str] = None, tokenizer: Optional[AutoTokenizer] = None):
         self._max_depth = max_depth
         self._suffix_tree = SuffixTree(max_depth)
         self._prompt_trees = {}
         self._req_to_seq_id = {}
+        if training_file is not None:
+            assert tokenizer is not None, "Tokenizer must be provided if training file is provided"
+            self.load_training_file(training_file, tokenizer)
 
     @property
     def max_depth(self) -> int:
@@ -62,6 +66,17 @@ class SuffixCache:
 
     def cached_prompt_ids(self) -> List[Hashable]:
         return list(self._prompt_trees.keys())
+    
+    def load_training_file(self, training_file: str, tokenizer: AutoTokenizer):
+        with open(training_file, "r") as f:
+            for i, line in enumerate(f):
+                entry = json.loads(line)
+                prompt = entry["prompt"]
+                response = entry["response"]
+                prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+                response_tokens = tokenizer.encode(response, add_special_tokens=False)
+                self.cache_prompt(1000000+i, prompt_tokens)
+                self.update_response(1000000+i, response_tokens)
 
     def cache_prompt(self, req_id: Hashable, prompt_token_ids: Sequence[int]):
         """
@@ -230,8 +245,9 @@ def greedy_search_suffix(
         draft_num_candidate_tokens=10,
         **model_kwargs,
 ):
-    if not hasattr(self, "_suffix_cache"):
-        self._suffix_cache = SuffixCache(64)
+    assert hasattr(self, "_suffix_cache"), "SuffixCache not initialized. Please call init_suffix_cache() first."
+    # if not hasattr(self, "_suffix_cache"):
+    #     self._suffix_cache = SuffixCache(64)
     global tokenizer
 
     # init values

@@ -36,9 +36,9 @@ class EConfig(PretrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            just in case (e.g., 2048 or 1024 or 8192).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -83,7 +83,7 @@ class EConfig(PretrainedConfig):
         num_attention_heads=32,
         num_key_value_heads=None,
         hidden_act="silu",
-        max_position_embeddings=2048,
+        max_position_embeddings=8192,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,

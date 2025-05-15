@@ -180,3 +180,7 @@ CMakeFiles
 CMakeCache.txt
 cmake_install.cmake
 Makefile
+
+logs
+data/cortex
+model_answer

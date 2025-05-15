@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from evaluation.eval import run_eval, reorg_answer_file
 
@@ -6,7 +7,7 @@ from fastchat.utils import str_to_torch_dtype
 
 from transformers import StoppingCriteriaList, MaxLengthCriteria
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from model.suffix.suffix import greedy_search_suffix
+from model.suffix.suffix import greedy_search_suffix, SuffixCache, SuffixTree, Candidate
 
 
 def suffix_forward(inputs, model, tokenizer, max_new_tokens):
@@ -87,15 +88,30 @@ if __name__ == "__main__":
         choices=["float32", "float64", "float16", "bfloat16"],
         help="Override the default dtype. If not set, it will use float16 on GPU.",
     )
+    parser.add_argument(
+        "--partition-name",
+        type=str,
+        default="",
+        help="The partition of the dataset to use.",
+    )
 
     args = parser.parse_args()
-
-    question_file = f"data/{args.bench_name}/question.jsonl"
+    question_folder = f"data/{args.bench_name}"
+    question_filename = "question.jsonl"
+    if args.partition_name != "":
+        question_filename = f"eval_{args.partition_name}.jsonl"
+        train_filename = f"train_{args.partition_name}.jsonl"
+    question_file = os.path.join(question_folder, question_filename)
+    training_file = os.path.join(question_folder, train_filename)
+    if not os.path.exists(training_file):
+        training_file = None
     if args.answer_file:
         answer_file = args.answer_file
     else:
-        answer_file = f"data/{args.bench_name}/model_answer/{args.model_id}.jsonl"
-
+        partition_prefix = f"{args.partition_name + '_' if len(args.partition_name) > 0 else ''}"
+        answer_file = f"data/{args.bench_name}/model_answer/{partition_prefix}{args.model_id}.jsonl"
+    print("Loading question file:", question_file)
+    print("Loading training file:", training_file)
     print(f"Output to {answer_file}")
 
 
@@ -108,6 +124,7 @@ if __name__ == "__main__":
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path)
 
+    model._suffix_cache = SuffixCache(64, training_file, tokenizer)
     model.greedy_search_suffix = greedy_search_suffix.__get__(model, type(model))
 
     run_eval(

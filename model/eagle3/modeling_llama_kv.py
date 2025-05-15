@@ -138,12 +138,12 @@ class LlamaRotaryEmbedding(nn.Module):
 
     Args:
         dim (int): The dimension of the embedding.
-        max_position_embeddings (int, optional): The maximum position for embeddings. Default is 2048.
+        max_position_embeddings (int, optional): The maximum position for embeddings. Default is 8192.
         base (int, optional): The base value for rotational encoding. Default is 10000.
         device (str, optional): The device on which the computation will be performed. Default is None.
     """
 
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings=8192, base=10000, device=None):
         super().__init__()
 
         self.dim = dim
@@ -209,7 +209,7 @@ class LlamaRotaryEmbedding_L31(nn.Module):
     def __init__(
         self,
         dim=None,
-        max_position_embeddings=2048,
+        max_position_embeddings=8192,
         base=10000,
         device=None,
         scaling_factor=1.0,
@@ -299,7 +299,7 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     Args:
         dim (int): The dimension of the embedding.
-        max_position_embeddings (int, optional): The maximum number of position embeddings. Default is 2048.
+        max_position_embeddings (int, optional): The maximum number of position embeddings. Default is 8192.
         base (int, optional): The base value for the rotational embeddings. Default is 10000.
         device (str or torch.device, optional): The device where the embeddings should be stored. Default is None.
         scaling_factor (float, optional): The scaling factor for the embeddings. Default is 1.0.
@@ -308,7 +308,7 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(
             self,
             dim,
-            max_position_embeddings=2048,
+            max_position_embeddings=8192,
             base=10000,
             device=None,
             scaling_factor=1.0,
@@ -352,7 +352,7 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(
             self,
             dim,
-            max_position_embeddings=2048,
+            max_position_embeddings=8192,
             base=10000,
             device=None,
             scaling_factor=1.0,
@@ -362,7 +362,7 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
         Args:
             dim (int): The dimensionality of the embedding.
-            max_position_embeddings (int, optional): Maximum number of position embeddings. Default is 2048.
+            max_position_embeddings (int, optional): Maximum number of position embeddings. Default is 8192.
             base (int, optional): Base value for scaling calculations. Default is 10000.
             device: The device to place tensors on. If None, uses the default device.
             scaling_factor (float, optional): Scaling factor for NTK scaling. Default is 1.0.
