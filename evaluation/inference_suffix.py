@@ -98,9 +98,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     question_folder = f"data/{args.bench_name}"
     question_filename = "question.jsonl"
-    if args.partition_name != "":
-        question_filename = f"eval_{args.partition_name}.jsonl"
-        train_filename = f"train_{args.partition_name}.jsonl"
+    if args.bench_name == "cortex" or args.bench_name == "swebench":
+        partition_suffix = f"_{args.partition_name}" if len(args.partition_name) > 0 else ""
+        question_filename = f"eval{partition_suffix}.jsonl"
+        train_filename = f"train{partition_suffix}.jsonl"
     question_file = os.path.join(question_folder, question_filename)
     training_file = os.path.join(question_folder, train_filename)
     if not os.path.exists(training_file):

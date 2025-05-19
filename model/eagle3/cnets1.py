@@ -107,7 +107,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
 
 
 class LlamaRotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, max_position_embeddings=8192, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings=16384, base=10000, device=None):
         super().__init__()
 
         self.dim = dim
@@ -145,7 +145,7 @@ class LlamaRotaryEmbedding(torch.nn.Module):
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def __init__(self, dim, max_position_embeddings=8192, base=10000, device=None, scaling_factor=1.0):
+    def __init__(self, dim, max_position_embeddings=16384, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
@@ -164,7 +164,7 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def __init__(self, dim, max_position_embeddings=8192, base=10000, device=None, scaling_factor=1.0):
+    def __init__(self, dim, max_position_embeddings=16384, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 

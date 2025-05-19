@@ -102,7 +102,7 @@ def get_model_answers(
         for j in range(len(question["turns"])):
             qs = question["turns"][j]
             messages = [{"role": "user", "content": qs}]
-            if "cortex" not in answer_file:
+            if "cortex" not in answer_file and "swebench" not in answer_file:
                 prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
             else:
                 prompt = qs

@@ -195,7 +195,7 @@ if __name__ == "__main__":
     print(md_content)
 
     # Save the markdown file in the same folder where results are found
-    output_md_file = os.path.join(results_folder, "results.md")
+    output_md_file = os.path.join("./data", f"results_{args.bench_name}.md")
     with open(output_md_file, "w") as outfile:
         outfile.write(md_content)
     

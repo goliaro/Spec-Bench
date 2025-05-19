@@ -197,7 +197,7 @@ class EaModel(nn.Module):
             top_p=0.0,
             top_k=0.0,
             max_new_tokens=2048,
-            max_length=8192,
+            max_length=16384,
             log=False,
             is_llama3=False,
 
@@ -308,7 +308,7 @@ class EaModel(nn.Module):
             top_p=0.0,
             top_k=0.0,
             max_new_tokens=2048,
-            max_length=8192,
+            max_length=16384,
             log=False,
             is_llama3=False,
 
@@ -385,7 +385,7 @@ class EaModel(nn.Module):
             top_p=0.0,
             top_k=0.0,
             max_new_tokens=2048,
-            max_length=8192,
+            max_length=16384,
             log=False,
             is_llama3=False,
 
@@ -488,7 +488,7 @@ class EaModel(nn.Module):
             top_p=0.0,
             top_k=0.0,
             max_new_tokens=2048,
-            max_length=8192,
+            max_length=16384,
             log=False,
             is_llama3=False,
 

@@ -183,4 +183,9 @@ Makefile
 
 logs
 data/cortex
+data/swebench
 model_answer
+*.zip
+data/*.md
+*.pdf
+swebench_trace_incremental_decoding.jsonl

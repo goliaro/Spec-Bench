@@ -12,6 +12,7 @@ from transformers.generation.stopping_criteria import StoppingCriteriaList
 from transformers.generation.utils import _crop_past_key_values
 import json
 from transformers import AutoTokenizer
+from tqdm import tqdm
 
 @dataclass
 class SuffixSpecResult:
@@ -69,14 +70,16 @@ class SuffixCache:
     
     def load_training_file(self, training_file: str, tokenizer: AutoTokenizer):
         with open(training_file, "r") as f:
-            for i, line in enumerate(f):
+            total_lines = sum(1 for _ in f)
+            f.seek(0)
+            for i, line in enumerate(tqdm(f, desc="Loading training file", total=total_lines)):
                 entry = json.loads(line)
                 prompt = entry["prompt"]
                 response = entry["response"]
                 prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
                 response_tokens = tokenizer.encode(response, add_special_tokens=False)
-                self.cache_prompt(1000000+i, prompt_tokens)
-                self.update_response(1000000+i, response_tokens)
+                self.cache_prompt(1000000 + i, prompt_tokens)
+                self.update_response(1000000 + i, response_tokens)
 
     def cache_prompt(self, req_id: Hashable, prompt_token_ids: Sequence[int]):
         """

@@ -205,7 +205,7 @@ class MixtralRMSNorm(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Mixtral
 class MixtralRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=8192, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings=16384, base=10000, device=None):
         super().__init__()
 
         self.dim = dim
