@@ -19,8 +19,9 @@ from .cnets import Model
 from .cnets1 import Model as Model1
 from .configs import EConfig
 
+from ..suffix.suffix import greedy_search_suffix, SuffixCache, SuffixTree, Candidate
 
-class EaModel(nn.Module):
+class HybridModel(nn.Module):
 
     def __init__(
             self,
@@ -30,6 +31,11 @@ class EaModel(nn.Module):
             ea_model_path,
             total_token,
             depth,
+            max_suffix_depth,
+            training_file,
+            draft_num_candidate_tokens,
+            max_spec_factor,
+            min_token_prob,
             top_k,
             threshold,
             ea_layer_state_dict,
@@ -43,6 +49,18 @@ class EaModel(nn.Module):
         self.base_model_name_or_path = base_model_name_or_path
         self.tokenizer = AutoTokenizer.from_pretrained(self.base_model_name_or_path, use_fast=False)
         self.use_eagle3 = use_eagle3
+
+        self.max_suffix_depth = max_suffix_depth
+        self.draft_num_candidate_tokens = draft_num_candidate_tokens
+        self.max_spec_factor = max_spec_factor
+        self.min_token_prob = min_token_prob
+        self.training_file = training_file
+        self.use_suffix_threshold = 100
+        self._suffix_cache = SuffixCache(self.max_suffix_depth,
+                                         self.training_file,
+                                         self.tokenizer)
+
+
         config = EConfig.from_pretrained(ea_model_path)
         with open(ea_model_path, "r") as f:
             con = json.loads(f.read())
@@ -91,6 +109,11 @@ class EaModel(nn.Module):
             ea_model_path=None,
             total_token=60,
             depth=7,
+            max_suffix_depth=60,
+            training_file=None,
+            draft_num_candidate_tokens=10,
+            max_spec_factor=2.0,
+            min_token_prob=0.1,
             top_k=10,
             threshold=1.0,
             **kwargs,
@@ -134,6 +157,11 @@ class EaModel(nn.Module):
             configpath,
             total_token,
             depth,
+            max_suffix_depth,
+            training_file,
+            draft_num_candidate_tokens,
+            max_spec_factor,
+            min_token_prob,
             top_k,
             threshold,
             ea_layer_state_dict
@@ -218,6 +246,9 @@ class EaModel(nn.Module):
         self.ea_layer.reset_kv()
         accept_length_list = []
 
+        assert hasattr(self, "_suffix_cache"), "SuffixCache not initialized. Please call init_suffix_cache() first."
+        self._suffix_cache.cache_prompt(0, input_ids[0].tolist())
+
         # Initialize the past key and value states
         if hasattr(self, "past_key_values"):
             past_key_values = self.past_key_values
@@ -295,6 +326,9 @@ class EaModel(nn.Module):
                 break
             if input_ids.shape[1] > max_length:
                 break
+        
+        self._suffix_cache.evict_prompt(0)
+        
         if not log:
             return input_ids
         else:

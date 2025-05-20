@@ -10,10 +10,11 @@ from fastchat.utils import str_to_torch_dtype
 
 from evaluation.eval import run_eval, reorg_answer_file
 
-from model.eagle3.ea_model import EaModel
-from model.eagle3.kv_cache import initialize_past_key_values
-from model.eagle3.utils import *
+from model.hybrid.ea_model import HybridModel
+from model.hybrid.kv_cache import initialize_past_key_values
+from model.hybrid.utils import *
 
+from model.suffix.suffix import greedy_search_suffix, SuffixCache, SuffixTree, Candidate
 
 def ea_forward(inputs, model, tokenizer, max_new_tokens, temperature=0.0):
     input_ids = inputs.input_ids
@@ -126,23 +127,31 @@ if __name__ == "__main__":
 
     question_folder = f"data/{args.bench_name}"
     question_filename = "question.jsonl"
+    training_file=""
     if args.bench_name == "cortex" or args.bench_name == "swebench":
         partition_suffix = f"_{args.partition_name}" if len(args.partition_name) > 0 else ""
         question_filename = f"eval{partition_suffix}.jsonl"
+        train_filename = f"train{partition_suffix}.jsonl"
+        training_file = os.path.join(question_folder, train_filename)
     question_file = os.path.join(question_folder, question_filename)
+    if not os.path.exists(training_file):
+        training_file = None
     if args.answer_file:
         answer_file = args.answer_file
     else:
         partition_prefix = f"{args.partition_name + '_' if len(args.partition_name) > 0 else ''}"
         answer_file = f"data/{args.bench_name}/model_answer/{partition_prefix}{args.model_id}.jsonl"
     print("Loading question file:", question_file)
+    print("Loading training file:", training_file)
     print(f"Output to {answer_file}")
 
-    model = EaModel.from_pretrained(
+    model = HybridModel.from_pretrained(
         base_model_path=args.base_model_path,
         ea_model_path=args.ea_model_path,
         total_token=args.total_token,
         depth=args.depth,
+        max_suffix_depth=64,
+        training_file=training_file,
         top_k=args.top_k,
         torch_dtype=str_to_torch_dtype(args.dtype),
         low_cpu_mem_usage=True,

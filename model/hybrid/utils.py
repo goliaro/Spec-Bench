@@ -241,6 +241,8 @@ def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
     if result.score < model.use_suffix_threshold:
         # If the score is below the threshold, use EAGLE-3 to speculate
         return model.ea_layer.topK_genrate(hidden_states, input_ids, model.base_model.lm_head,logits_processor)
+    else:
+        assert False, "The suffix tree should be used in this case."
     
     return result.draft_tokens, result.retrieve_indices, result.tree_mask, result.tree_position_ids
     
@@ -454,6 +456,10 @@ def update_inference_inputs(
     input_ids = torch.cat(
         [input_ids, candidates[None, best_candidate, : accept_length + 1].to(input_ids.device)], dim=-1
     )
+    
+    # update suffix tree
+    model._suffix_cache.update_response(0, candidates[best_candidate, : accept_length + 1].tolist())
+
     # Update the past key values based on the selected tokens
     # Source tensor that contains relevant past information based on the selected candidate
     for past_key_values_data in past_key_values_data_list:
@@ -478,10 +484,11 @@ def update_inference_inputs(
         token = torch.argmax(prob)
         token = token[None, None]
     # hidden_state = torch.cat((hidden_state, accept_hidden_state_new), dim=1)
-    draft_tokens, retrieve_indices,tree_mask,tree_position_ids = model.ea_layer.topK_genrate(accept_hidden_state_new,
-                                              input_ids=torch.cat((input_ids, token.to(input_ids.device)), dim=1),
-                                              head=model.base_model.lm_head,logits_processor=logits_processor)
-
+    
+    draft_tokens, retrieve_indices, tree_mask, tree_position_ids = hybrid_speculate(model, 
+                                                                                    input_ids=torch.cat((input_ids, token.to(input_ids.device)), dim=1),
+                                                                                    hidden_states=accept_hidden_state_new,
+                                                                                    logits_processor=logits_processor)
 
     new_token += accept_length + 1
 
