@@ -229,6 +229,62 @@ def initialize_tree0(input_ids, model, past_key_values, logits_processor):
     #     return draft_tokens, retrieve_indices,tree_mask,tree_position_ids, hidden_states, token
     return draft_tokens, retrieve_indices,tree_mask,tree_position_ids, logits, hidden_state, sample_token
 
+def construct_retrieve_indices(token_ids, parents, device):
+    # Find all indices that are used as parents
+    parent_set = set(parents)
+    
+    # Get all indices
+    all_indices = set(range(len(token_ids)))
+    
+    # Leaves are indices that don't appear as parents
+    leaf_indices = sorted(list(all_indices - parent_set))
+    
+    # For each leaf, trace path back to root
+    paths = []
+    for leaf_idx in leaf_indices:
+        path = [leaf_idx]
+        current = leaf_idx
+        
+        # Trace back to root
+        while parents[current] != -1:  # Assuming -1 indicates the root
+            current = parents[current]
+            path.append(current)
+        
+        # Reverse to get path from root to leaf
+        path.reverse()
+        paths.append(path)
+    
+    # Find maximum depth
+    max_depth = max(len(path) for path in paths)
+    
+    # Create retrieve_indices tensor padded with -1
+    retrieve_indices = torch.ones((len(leaf_indices), max_depth), dtype=torch.long, device=device) * -1
+    
+    # Fill in the actual indices
+    for i, path in enumerate(paths):
+        retrieve_indices[i, :len(path)] = torch.tensor(path)
+    
+    return retrieve_indices
+
+def construct_tree_mask(parents, device):
+    tree_mask = torch.zeros((1, 1, len(parents), len(parents)), dtype=torch.float32, device=device)
+    for i, parent in enumerate(parents):
+        if parent != -1:
+            tree_mask[..., i, :] = tree_mask[..., parent, :]
+        else:
+            assert i == 0
+        tree_mask[..., i, i] = 1
+    return tree_mask
+
+def construct_tree_position_ids(parents, device):
+    tree_position_ids = torch.zeros(len(parents), dtype=torch.long, device=device)
+    for i, parent in enumerate(parents):
+        if parent == -1:
+            tree_position_ids[i] = 0
+        else:
+            tree_position_ids[i] = tree_position_ids[parent] + 1
+    return tree_position_ids
+
 def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
     assert hasattr(model, "_suffix_cache"), "SuffixCache not initialized. Please call init_suffix_cache() first."
     result = model._suffix_cache.speculate(
@@ -240,11 +296,35 @@ def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
     )
     if result.score < model.use_suffix_threshold:
         # If the score is below the threshold, use EAGLE-3 to speculate
-        return model.ea_layer.topK_genrate(hidden_states, input_ids, model.base_model.lm_head,logits_processor)
+        draft_tokens, retrieve_indices, tree_mask, tree_position_ids = model.ea_layer.topK_genrate(hidden_states, input_ids, model.base_model.lm_head,logits_processor)
+        print("use eagle3")
+        print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
+        print(draft_tokens)
+        print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
+        print(retrieve_indices)
+        print("tree_mask", tree_mask.shape, tree_mask.dtype)
+        print(tree_mask)
+        print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
+        print(tree_position_ids)
+        print()
+
     else:
-        assert False, "The suffix tree should be used in this case."
+        draft_tokens = torch.tensor(result.token_ids, dtype=torch.int64, device=input_ids.device).unsqueeze(0)
+        retrieve_indices = construct_retrieve_indices(result.token_ids, result.parents, input_ids.device)
+        tree_mask = construct_tree_mask(result.parents, input_ids.device)
+        tree_position_ids = construct_tree_position_ids(result.parents, input_ids.device)
+        print("use suffix tree")
+        print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
+        print(draft_tokens)
+        print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
+        print(retrieve_indices)
+        print("tree_mask", tree_mask.shape, tree_mask.dtype)
+        print(tree_mask)
+        print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
+        print(tree_position_ids)
+        print()
     
-    return result.draft_tokens, result.retrieve_indices, result.tree_mask, result.tree_position_ids
+    return draft_tokens, retrieve_indices, tree_mask, tree_position_ids
     
 
 def initialize_tree(input_ids, model, past_key_values, logits_processor):
@@ -270,7 +350,8 @@ def initialize_tree(input_ids, model, past_key_values, logits_processor):
         hidden_states=torch.cat(outputs["hidden_states"],dim=-1)
     
     draft_tokens, retrieve_indices,tree_mask,tree_position_ids = hybrid_speculate(model, input_ids, hidden_states, logits_processor)
-    return draft_tokens, retrieve_indices,tree_mask,tree_position_ids, orig, hidden_states, token
+    
+    return draft_tokens, retrieve_indices,tree_mask,tree_position_ids, orig
 
 
 def reset_tree_mode(
@@ -346,7 +427,7 @@ def tree_decoding(
         hidden_state = torch.cat(outputs["hidden_states"], dim=-1)
 
     logits = tree_logits[0, retrieve_indices]
-    return logits, hidden_state, outputs
+    return logits, hidden_state
 
 
 
@@ -484,7 +565,7 @@ def update_inference_inputs(
         token = torch.argmax(prob)
         token = token[None, None]
     # hidden_state = torch.cat((hidden_state, accept_hidden_state_new), dim=1)
-    
+    print("accept_length", accept_length.item())
     draft_tokens, retrieve_indices, tree_mask, tree_position_ids = hybrid_speculate(model, 
                                                                                     input_ids=torch.cat((input_ids, token.to(input_ids.device)), dim=1),
                                                                                     hidden_states=accept_hidden_state_new,
@@ -492,7 +573,7 @@ def update_inference_inputs(
 
     new_token += accept_length + 1
 
-    return input_ids, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, new_token, None, token
+    return input_ids, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, new_token
 
 
 if __name__ == "__main__":

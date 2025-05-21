@@ -55,7 +55,7 @@ class HybridModel(nn.Module):
         self.max_spec_factor = max_spec_factor
         self.min_token_prob = min_token_prob
         self.training_file = training_file
-        self.use_suffix_threshold = 100
+        self.use_suffix_threshold = 3
         self._suffix_cache = SuffixCache(self.max_suffix_depth,
                                          self.training_file,
                                          self.tokenizer)
@@ -269,7 +269,7 @@ class HybridModel(nn.Module):
         input_len = input_ids.shape[1]
         cur_length = input_len
         reset_tree_mode(self)
-        draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits, hidden_state, sample_token = initialize_tree(
+        draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits = initialize_tree(
             input_ids, self, past_key_values, logits_processor
         )
         new_token = 0
@@ -280,7 +280,7 @@ class HybridModel(nn.Module):
 
             draft_tokens = draft_tokens.to(input_ids.device)
             # with Timer("tree_decoding"):
-            logits, hidden_state_new, outputs = tree_decoding(
+            logits, hidden_state_new = tree_decoding(
                 self,
                 draft_tokens,
                 past_key_values,
@@ -297,7 +297,7 @@ class HybridModel(nn.Module):
             )
             # print(accept_length)
             # with Timer("update_inference_inputs"):
-            input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token, hidden_state, sample_token = update_inference_inputs(
+            input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token = update_inference_inputs(
                 input_ids,
                 candidates,
                 best_candidate,
@@ -458,7 +458,7 @@ class HybridModel(nn.Module):
 
         input_len = input_ids.shape[1]
         reset_tree_mode(self)
-        draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits, hidden_state, sample_token = initialize_tree(
+        draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits = initialize_tree(
             input_ids, self, past_key_values, logits_processor
         )
         new_token = 0
@@ -469,7 +469,7 @@ class HybridModel(nn.Module):
 
             draft_tokens = draft_tokens.to(input_ids.device)
             # with Timer("tree_decoding"):
-            logits, hidden_state_new, outputs = tree_decoding(
+            logits, hidden_state_new = tree_decoding(
                 self,
                 draft_tokens,
                 past_key_values,
@@ -486,7 +486,7 @@ class HybridModel(nn.Module):
             )
             # print(accept_length)
             # with Timer("update_inference_inputs"):
-            input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token, hidden_state, sample_token = update_inference_inputs(
+            input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token = update_inference_inputs(
                 input_ids,
                 candidates,
                 best_candidate,

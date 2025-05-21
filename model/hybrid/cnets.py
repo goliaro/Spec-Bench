@@ -680,6 +680,11 @@ class Model(nn.Module):
         # with Timer("draft many"):
         if hasattr(self, "stable_kv") and self.stable_kv is not None:
             kv_len = self.stable_kv[0][0].shape[2]
+            print("topk_genrate:")
+            print("kv_len", kv_len)
+            print("hidden_states", hidden_states.shape)
+            print("input_ids", input_ids.shape)
+            print("self.stable_kv:", len(self.stable_kv), len(self.stable_kv[0]), self.stable_kv[0][0].shape, self.stable_kv[0][1].shape)
             out_hidden, past_key_values = self(hidden_states, input_ids=input_ids[:, kv_len:],
                                                past_key_values=self.stable_kv, use_cache=True)
         else:
