@@ -286,6 +286,17 @@ def construct_tree_position_ids(parents, device):
     return tree_position_ids
 
 def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
+    """Speculates the next tokens using either the suffix tree or EAGLE-3.
+
+    Args:
+        model (HybridModel): The model containing the LLM and the EAGLE head
+        input_ids (torch.Tensor): The input token IDs, including the bonus token
+        hidden_states (torch.Tensor): The concatenated 2nd/mid/2nd-to-last hidden states from the LLM, excluding the bonus token
+        logits_processor (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     assert hasattr(model, "_suffix_cache"), "SuffixCache not initialized. Please call init_suffix_cache() first."
     result = model._suffix_cache.speculate(
         0,
@@ -294,37 +305,42 @@ def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
         max_spec_factor=model.max_spec_factor,
         min_token_prob=model.min_token_prob
     )
-    if result.score < model.use_suffix_threshold:
-        # If the score is below the threshold, use EAGLE-3 to speculate
-        draft_tokens, retrieve_indices, tree_mask, tree_position_ids = model.ea_layer.topK_genrate(hidden_states, input_ids, model.base_model.lm_head,logits_processor)
-        print("use eagle3")
-        print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
-        print(draft_tokens)
-        print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
-        print(retrieve_indices)
-        print("tree_mask", tree_mask.shape, tree_mask.dtype)
-        print(tree_mask)
-        print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
-        print(tree_position_ids)
-        print()
-
-    else:
+    speculated_with_suffix = result.score >= model.use_suffix_threshold
+    if speculated_with_suffix:
         draft_tokens = torch.tensor(result.token_ids, dtype=torch.int64, device=input_ids.device).unsqueeze(0)
         retrieve_indices = construct_retrieve_indices(result.token_ids, result.parents, input_ids.device)
         tree_mask = construct_tree_mask(result.parents, input_ids.device)
         tree_position_ids = construct_tree_position_ids(result.parents, input_ids.device)
-        print("use suffix tree")
+        print("\n-------- suffix tree speculation --------")
+        print("input_ids", input_ids.shape, input_ids.dtype)
+        print("\thidden_states",hidden_states.shape, hidden_states.dtype)
         print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
-        print(draft_tokens)
+        print("\t",draft_tokens)
         print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
-        print(retrieve_indices)
+        print("\t",retrieve_indices)
         print("tree_mask", tree_mask.shape, tree_mask.dtype)
-        print(tree_mask)
+        print("\t",tree_mask)
         print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
-        print(tree_position_ids)
+        print("\t",tree_position_ids)
         print()
+    else:
+        # If the score is below the threshold, use EAGLE-3 to speculate
+        print("\n-------- eagle3 speculation -------- ")
+        print("\tinput_ids", input_ids.shape, input_ids.dtype)
+        print("\thidden_states",hidden_states.shape, hidden_states.dtype)
+        draft_tokens, retrieve_indices, tree_mask, tree_position_ids = model.ea_layer.topK_genrate(hidden_states, input_ids, model.base_model.lm_head,logits_processor)
+        print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
+        print("\t",draft_tokens)
+        print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
+        print("\t",retrieve_indices)
+        print("tree_mask", tree_mask.shape, tree_mask.dtype)
+        print("\t",tree_mask)
+        print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
+        print("\t",tree_position_ids)
+        print()
+        
     
-    return draft_tokens, retrieve_indices, tree_mask, tree_position_ids
+    return speculated_with_suffix, draft_tokens, retrieve_indices, tree_mask, tree_position_ids
     
 
 def initialize_tree(input_ids, model, past_key_values, logits_processor):
@@ -349,9 +365,9 @@ def initialize_tree(input_ids, model, past_key_values, logits_processor):
             outputs["hidden_states"] = [x.to(ea_device) for x in outputs["hidden_states"]]
         hidden_states=torch.cat(outputs["hidden_states"],dim=-1)
     
-    draft_tokens, retrieve_indices,tree_mask,tree_position_ids = hybrid_speculate(model, input_ids, hidden_states, logits_processor)
+    speculated_with_suffix, draft_tokens, retrieve_indices,tree_mask,tree_position_ids = hybrid_speculate(model, input_ids, hidden_states, logits_processor)
     
-    return draft_tokens, retrieve_indices,tree_mask,tree_position_ids, orig
+    return speculated_with_suffix, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, orig
 
 
 def reset_tree_mode(
@@ -521,6 +537,7 @@ def update_inference_inputs(
         accept_length,
         retrieve_indices,
         logits_processor,
+        speculated_with_suffix,
         new_token,
         past_key_values_data_list,
         current_length_data,
@@ -552,9 +569,17 @@ def update_inference_inputs(
 
     # Update the current length tensor (currently only support batch size is 1)
     current_length_data.fill_(prev_input_len + tgt.shape[-2])
-
     retrieve_hidden_state_new = hidden_state_new[:, retrieve_indices]
+    print("@ update_inference_inputs: @")
+    print(f"input_ids - adding accepted tokens ({accept_length.item()}): {prev_input_len} -> {input_ids.shape[1]}")
+    print("hidden_state_new", hidden_state_new.shape, hidden_state_new.dtype)
+    print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
+    print(retrieve_indices)
+    print("retrieve_hidden_state_new", retrieve_hidden_state_new.shape, retrieve_hidden_state_new.dtype)
     accept_hidden_state_new = retrieve_hidden_state_new[:, best_candidate, : accept_length + 1]
+    print("best_candidate", best_candidate)
+    print("accept_length", accept_length)
+    print("accept_hidden_state_new", accept_hidden_state_new.shape, accept_hidden_state_new.dtype)
     # token=model.base_model.lm_head(accept_hidden_state_new[:,-1]).argmax()
     # token=token[None,None]
     prob = sample_p
@@ -565,15 +590,28 @@ def update_inference_inputs(
         token = torch.argmax(prob)
         token = token[None, None]
     # hidden_state = torch.cat((hidden_state, accept_hidden_state_new), dim=1)
-    print("accept_length", accept_length.item())
-    draft_tokens, retrieve_indices, tree_mask, tree_position_ids = hybrid_speculate(model, 
-                                                                                    input_ids=torch.cat((input_ids, token.to(input_ids.device)), dim=1),
-                                                                                    hidden_states=accept_hidden_state_new,
-                                                                                    logits_processor=logits_processor)
+    # print("accept_length", accept_length.item())
+    input_ids_new = torch.cat((input_ids, token.to(input_ids.device)), dim=1)
+    print("input_ids_new: ", input_ids_new.shape)
+    print("model.suffix_hidden_states", (model.suffix_hidden_states or torch.tensor([])).shape)
+    print("speculated_with_suffix", speculated_with_suffix)
+    assert hasattr(model, "suffix_hidden_states"), "suffix_hidden_states not initialized"
+    if model.suffix_hidden_states is not None:
+        accept_hidden_state_new = torch.cat((model.suffix_hidden_states, accept_hidden_state_new), dim=-2)
+    if speculated_with_suffix:
+        model.suffix_hidden_states = accept_hidden_state_new
+        print("model.suffix_hidden_states", model.suffix_hidden_states.shape)
+    else:
+        model.suffix_hidden_states = None
+    assert accept_hidden_state_new is not None, "accept_hidden_state_new is None"
+    speculated_with_suffix, draft_tokens, retrieve_indices, tree_mask, tree_position_ids = hybrid_speculate(model, 
+                                                                                                            input_ids=input_ids_new,
+                                                                                                            hidden_states=accept_hidden_state_new,
+                                                                                                            logits_processor=logits_processor)
 
     new_token += accept_length + 1
 
-    return input_ids, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, new_token
+    return speculated_with_suffix, input_ids, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, new_token
 
 
 if __name__ == "__main__":

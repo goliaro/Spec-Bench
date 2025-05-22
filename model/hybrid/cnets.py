@@ -426,6 +426,7 @@ class LlamaDecoderLayeremb(nn.Module):
         hidden_states = self.hidden_norm(hidden_states)
         input_emb = self.input_layernorm(input_emb)
 
+        print(f"torch.cat input_emb ({input_emb.shape}) with hidden_states ({hidden_states.shape}) at dim=-1")
         hidden_states = torch.cat((input_emb, hidden_states), dim=-1)
 
 
@@ -678,18 +679,21 @@ class Model(nn.Module):
         self.reset()
 
         # with Timer("draft many"):
+        print("@ topk_genrate: @")
         if hasattr(self, "stable_kv") and self.stable_kv is not None:
             kv_len = self.stable_kv[0][0].shape[2]
-            print("topk_genrate:")
-            print("kv_len", kv_len)
-            print("hidden_states", hidden_states.shape)
-            print("input_ids", input_ids.shape)
-            print("self.stable_kv:", len(self.stable_kv), len(self.stable_kv[0]), self.stable_kv[0][0].shape, self.stable_kv[0][1].shape)
+            print("\tkv_len", kv_len)
+            print("\thidden_states", hidden_states.shape)
+            print("\tinput_ids[:, kv_len:]", input_ids[:, kv_len:].shape)
+            print("\tself.stable_kv:", len(self.stable_kv), len(self.stable_kv[0]), self.stable_kv[0][0].shape, self.stable_kv[0][1].shape)
             out_hidden, past_key_values = self(hidden_states, input_ids=input_ids[:, kv_len:],
                                                past_key_values=self.stable_kv, use_cache=True)
         else:
+            kv_len=0
             out_hidden, past_key_values = self(hidden_states, input_ids=input_ids, use_cache=True)
         self.stable_kv = past_key_values
+        print(f"eagle layer fwd. kv_len: {kv_len} -> {self.stable_kv[0][0].shape[2]}")
+
         last_hidden = out_hidden[:, -1]
 
         # last_headout = head(last_hidden)

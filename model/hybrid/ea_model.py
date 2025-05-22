@@ -55,10 +55,11 @@ class HybridModel(nn.Module):
         self.max_spec_factor = max_spec_factor
         self.min_token_prob = min_token_prob
         self.training_file = training_file
-        self.use_suffix_threshold = 3
+        self.use_suffix_threshold = 1
         self._suffix_cache = SuffixCache(self.max_suffix_depth,
                                          self.training_file,
                                          self.tokenizer)
+        self.suffix_hidden_states = None
 
 
         config = EConfig.from_pretrained(ea_model_path)
@@ -243,6 +244,7 @@ class HybridModel(nn.Module):
 
         padding = (torch.zeros(1, 1, dtype=torch.long) - 1).to(input_ids.device)
         input_ids = input_ids.clone()
+        print(f"eagenerate with {input_ids.shape[1]} prompt tokens")
         self.ea_layer.reset_kv()
         accept_length_list = []
 
@@ -269,7 +271,7 @@ class HybridModel(nn.Module):
         input_len = input_ids.shape[1]
         cur_length = input_len
         reset_tree_mode(self)
-        draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits = initialize_tree(
+        speculated_with_suffix, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits = initialize_tree(
             input_ids, self, past_key_values, logits_processor
         )
         new_token = 0
@@ -297,13 +299,14 @@ class HybridModel(nn.Module):
             )
             # print(accept_length)
             # with Timer("update_inference_inputs"):
-            input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token = update_inference_inputs(
+            speculated_with_suffix, input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token = update_inference_inputs(
                 input_ids,
                 candidates,
                 best_candidate,
                 accept_length,
                 retrieve_indices,
                 logits_processor,
+                speculated_with_suffix,
                 new_token,
                 past_key_values_data,
                 current_length_data,
