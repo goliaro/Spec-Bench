@@ -24,8 +24,7 @@ CUDA_VISIBLE_DEVICES=0 python -m evaluation.inference_hybrid \
     --base-model-path $Vicuna_PATH \
     --model-id ${MODEL_NAME}-hybrid-${torch_dtype} \
     --bench-name $bench_NAME \
-    --question-begin 81 --question-end 82 \
     --temperature $TEMP \
     --dtype $torch_dtype > logs/logs_hybrid.txt 2>&1
-
+#    --question-begin 81 --question-end 82 \
 

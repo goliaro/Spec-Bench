@@ -307,17 +307,17 @@ def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
     )
     speculate_with_suffix = result.score >= model.use_suffix_threshold
 
-    print("speculated_with_suffix", speculate_with_suffix)
+    # print("speculated_with_suffix", speculate_with_suffix)
     assert hasattr(model, "suffix_hidden_states"), "suffix_hidden_states not initialized"
     if model.suffix_hidden_states is not None:
-        print(f"appending model.suffix_hidden_states ({model.suffix_hidden_states.shape}) to hidden_states ({hidden_states.shape})")
+        # print(f"appending model.suffix_hidden_states ({model.suffix_hidden_states.shape}) to hidden_states ({hidden_states.shape})")
         hidden_states = torch.cat((model.suffix_hidden_states, hidden_states), dim=-2)
     if speculate_with_suffix:
         model.suffix_hidden_states = hidden_states
-        print("setting model.suffix_hidden_states to", model.suffix_hidden_states.shape)
+        # print("setting model.suffix_hidden_states to", model.suffix_hidden_states.shape)
     else:
         model.suffix_hidden_states = None
-        print("clearing model.suffix_hidden_states to " , model.suffix_hidden_states)
+        # print("clearing model.suffix_hidden_states to " , model.suffix_hidden_states)
     assert hidden_states is not None, "hidden_states is None"
 
 
@@ -326,33 +326,33 @@ def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
         retrieve_indices = construct_retrieve_indices(result.token_ids, result.parents, input_ids.device)
         tree_mask = construct_tree_mask(result.parents, input_ids.device)
         tree_position_ids = construct_tree_position_ids(result.parents, input_ids.device)
-        print("\n-------- suffix tree speculation --------")
-        print("input_ids", input_ids.shape, input_ids.dtype)
-        print("\thidden_states",hidden_states.shape, hidden_states.dtype)
-        print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
-        print("\t",draft_tokens)
-        print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
-        print("\t",retrieve_indices)
-        print("tree_mask", tree_mask.shape, tree_mask.dtype)
-        print("\t",tree_mask)
-        print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
-        print("\t",tree_position_ids)
-        print()
+        # print("\n-------- suffix tree speculation --------")
+        # print("input_ids", input_ids.shape, input_ids.dtype)
+        # print("\thidden_states",hidden_states.shape, hidden_states.dtype)
+        # print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
+        # print("\t",draft_tokens)
+        # print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
+        # print("\t",retrieve_indices)
+        # print("tree_mask", tree_mask.shape, tree_mask.dtype)
+        # print("\t",tree_mask)
+        # print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
+        # print("\t",tree_position_ids)
+        # print()
     else:
         # If the score is below the threshold, use EAGLE-3 to speculate
-        print("\n-------- eagle3 speculation -------- ")
-        print("\tinput_ids", input_ids.shape, input_ids.dtype)
-        print("\thidden_states",hidden_states.shape, hidden_states.dtype)
+        # print("\n-------- eagle3 speculation -------- ")
+        # print("\tinput_ids", input_ids.shape, input_ids.dtype)
+        # print("\thidden_states",hidden_states.shape, hidden_states.dtype)
         draft_tokens, retrieve_indices, tree_mask, tree_position_ids = model.ea_layer.topK_genrate(hidden_states, input_ids, model.base_model.lm_head,logits_processor)
-        print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
-        print("\t",draft_tokens)
-        print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
-        print("\t",retrieve_indices)
-        print("tree_mask", tree_mask.shape, tree_mask.dtype)
-        print("\t",tree_mask)
-        print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
-        print("\t",tree_position_ids)
-        print()
+        # print("draft_tokens", draft_tokens.shape, draft_tokens.dtype)
+        # print("\t",draft_tokens)
+        # print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
+        # print("\t",retrieve_indices)
+        # print("tree_mask", tree_mask.shape, tree_mask.dtype)
+        # print("\t",tree_mask)
+        # print("tree_position_ids", tree_position_ids.shape, tree_position_ids.dtype)
+        # print("\t",tree_position_ids)
+        # print()
         
     
     return draft_tokens, retrieve_indices, tree_mask, tree_position_ids
@@ -584,18 +584,17 @@ def update_inference_inputs(
     # Update the current length tensor (currently only support batch size is 1)
     current_length_data.fill_(prev_input_len + tgt.shape[-2])
     retrieve_hidden_state_new = hidden_state_new[:, retrieve_indices]
-    print("@ update_inference_inputs: @")
-    print(f"input_ids - adding accepted tokens ({accept_length.item()}): {prev_input_len} -> {input_ids.shape[1]}")
-    print("hidden_state_new", hidden_state_new.shape, hidden_state_new.dtype)
-    print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
-    print(retrieve_indices)
-    print("retrieve_hidden_state_new", retrieve_hidden_state_new.shape, retrieve_hidden_state_new.dtype)
+    # print("@ update_inference_inputs: @")
+    # print(f"input_ids - adding accepted tokens ({accept_length.item()}): {prev_input_len} -> {input_ids.shape[1]}")
+    # print("hidden_state_new", hidden_state_new.shape, hidden_state_new.dtype)
+    # print("retrieve_indices", retrieve_indices.shape, retrieve_indices.dtype)
+    # print(retrieve_indices)
+    # print("retrieve_hidden_state_new", retrieve_hidden_state_new.shape, retrieve_hidden_state_new.dtype)
     accept_hidden_state_new = retrieve_hidden_state_new[:, best_candidate, : accept_length + 1]
-    print("best_candidate", best_candidate)
-    print("accept_length", accept_length)
-    print("accept_hidden_state_new", accept_hidden_state_new.shape, accept_hidden_state_new.dtype)
-    # token=model.base_model.lm_head(accept_hidden_state_new[:,-1]).argmax()
-    # token=token[None,None]
+    # print("best_candidate", best_candidate)
+    # print("accept_length", accept_length)
+    # print("accept_hidden_state_new", accept_hidden_state_new.shape, accept_hidden_state_new.dtype)
+    
     prob = sample_p
     if logits_processor is not None:
         token = torch.multinomial(prob, 1)
@@ -606,8 +605,8 @@ def update_inference_inputs(
     # hidden_state = torch.cat((hidden_state, accept_hidden_state_new), dim=1)
     # print("accept_length", accept_length.item())
     input_ids_new = torch.cat((input_ids, token.to(input_ids.device)), dim=1)
-    print("input_ids_new: ", input_ids_new.shape)
-    # print("model.suffix_hidden_states", (model.suffix_hidden_states or torch.tensor([])).shape)
+    # print("input_ids_new: ", input_ids_new.shape)
+
     
     draft_tokens, retrieve_indices, tree_mask, tree_position_ids = hybrid_speculate(model, 
                                                                                     input_ids=input_ids_new,

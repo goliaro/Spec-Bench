@@ -55,7 +55,7 @@ class HybridModel(nn.Module):
         self.max_spec_factor = max_spec_factor
         self.min_token_prob = min_token_prob
         self.training_file = training_file
-        self.use_suffix_threshold = 1
+        self.use_suffix_threshold = 3
         self._suffix_cache = SuffixCache(self.max_suffix_depth,
                                          self.training_file,
                                          self.tokenizer)
@@ -244,12 +244,14 @@ class HybridModel(nn.Module):
 
         padding = (torch.zeros(1, 1, dtype=torch.long) - 1).to(input_ids.device)
         input_ids = input_ids.clone()
-        print(f"eagenerate with {input_ids.shape[1]} prompt tokens")
+        # print(f"eagenerate with {input_ids.shape[1]} prompt tokens")
         self.ea_layer.reset_kv()
         accept_length_list = []
 
         assert hasattr(self, "_suffix_cache"), "SuffixCache not initialized. Please call init_suffix_cache() first."
         self._suffix_cache.cache_prompt(0, input_ids[0].tolist())
+
+        self.suffix_hidden_states = None
 
         # Initialize the past key and value states
         if hasattr(self, "past_key_values"):

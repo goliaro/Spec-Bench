@@ -92,72 +92,72 @@ def get_model_answers(
 
     question = questions[0]
 
-    # # warmup
-    # for _ in range(3):
-    #     torch.manual_seed(0)
-    #     turns = []
-    #     steps = []
-    #     new_tokens = []
-    #     wall_time = []
-    #     for j in range(len(question["turns"])):
-    #         qs = question["turns"][j]
-    #         messages = [{"role": "user", "content": qs}]
-    #         if "cortex" not in answer_file and "swebench" not in answer_file:
-    #             prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    #         else:
-    #             prompt = qs
-    #         inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
-    #         input_ids = inputs.input_ids
-    #         try:
-    #             torch.cuda.synchronize()
-    #             start_time = time.time()
-    #             output_ids, new_token, step, accept_length_tree = forward_func(
-    #                 inputs,
-    #                 model,
-    #                 tokenizer,
-    #                 max_new_tokens,
-    #                 **kwargs,
-    #             )
-    #             torch.cuda.synchronize()
-    #             total_time = time.time() - start_time
-    #             output_ids = output_ids[0][len(input_ids[0]):]
-    #             # be consistent with the template's stop_token_ids
-    #             stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.eos_token)
-    #             if stop_token_ids:
-    #                 stop_token_ids_index = [
-    #                     i
-    #                     for i, id in enumerate(output_ids)
-    #                     if id == stop_token_ids
-    #                 ]
-    #                 if len(stop_token_ids_index) > 0:
-    #                     output_ids = output_ids[: stop_token_ids_index[0]]
+    # warmup
+    for _ in range(3):
+        torch.manual_seed(0)
+        turns = []
+        steps = []
+        new_tokens = []
+        wall_time = []
+        for j in range(len(question["turns"])):
+            qs = question["turns"][j]
+            messages = [{"role": "user", "content": qs}]
+            if "cortex" not in answer_file and "swebench" not in answer_file:
+                prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            else:
+                prompt = qs
+            inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+            input_ids = inputs.input_ids
+            try:
+                torch.cuda.synchronize()
+                start_time = time.time()
+                output_ids, new_token, step, accept_length_tree = forward_func(
+                    inputs,
+                    model,
+                    tokenizer,
+                    max_new_tokens,
+                    **kwargs,
+                )
+                torch.cuda.synchronize()
+                total_time = time.time() - start_time
+                output_ids = output_ids[0][len(input_ids[0]):]
+                # be consistent with the template's stop_token_ids
+                stop_token_ids = tokenizer.convert_tokens_to_ids(tokenizer.eos_token)
+                if stop_token_ids:
+                    stop_token_ids_index = [
+                        i
+                        for i, id in enumerate(output_ids)
+                        if id == stop_token_ids
+                    ]
+                    if len(stop_token_ids_index) > 0:
+                        output_ids = output_ids[: stop_token_ids_index[0]]
 
-    #             output = tokenizer.decode(
-    #                 output_ids,
-    #                 spaces_between_special_tokens=False,
-    #             )
-    #             # Remove any EOS token from the output
-    #             if tokenizer.eos_token and output.find(tokenizer.eos_token) > 0:
-    #                 output = output[: output.find(tokenizer.eos_token)]
-    #             for special_token in tokenizer.special_tokens_map.values():
-    #                 if isinstance(special_token, list):
-    #                     for special_tok in special_token:
-    #                         output = output.replace(special_tok, "")
-    #                 else:
-    #                     output = output.replace(special_token, "")
-    #             output = output.strip()
-    #         except RuntimeError as e:
-    #             print("ERROR question ID: ", question["question_id"])
-    #             output = "ERROR"
-    #             raise e
+                output = tokenizer.decode(
+                    output_ids,
+                    spaces_between_special_tokens=False,
+                )
+                # Remove any EOS token from the output
+                if tokenizer.eos_token and output.find(tokenizer.eos_token) > 0:
+                    output = output[: output.find(tokenizer.eos_token)]
+                for special_token in tokenizer.special_tokens_map.values():
+                    if isinstance(special_token, list):
+                        for special_tok in special_token:
+                            output = output.replace(special_tok, "")
+                    else:
+                        output = output.replace(special_token, "")
+                output = output.strip()
+            except RuntimeError as e:
+                print("ERROR question ID: ", question["question_id"])
+                output = "ERROR"
+                raise e
 
-    #         turns.append(output)
-    #         steps.append(int(step))
-    #         new_tokens.append(int(new_token))
-    #         wall_time.append(total_time)
-    #         # Add the assistant's response to messages for the next turn
-    #         messages.append({"role": "assistant", "content": output})
-    # print('Warmup done')
+            turns.append(output)
+            steps.append(int(step))
+            new_tokens.append(int(new_token))
+            wall_time.append(total_time)
+            # Add the assistant's response to messages for the next turn
+            messages.append({"role": "assistant", "content": output})
+    print('Warmup done')
 
     accept_lengths_tree = []
     for question in tqdm(questions):
