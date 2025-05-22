@@ -271,7 +271,7 @@ class HybridModel(nn.Module):
         input_len = input_ids.shape[1]
         cur_length = input_len
         reset_tree_mode(self)
-        speculated_with_suffix, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits = initialize_tree(
+        draft_tokens, retrieve_indices, tree_mask, tree_position_ids, logits = initialize_tree(
             input_ids, self, past_key_values, logits_processor
         )
         new_token = 0
@@ -299,14 +299,13 @@ class HybridModel(nn.Module):
             )
             # print(accept_length)
             # with Timer("update_inference_inputs"):
-            speculated_with_suffix, input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token = update_inference_inputs(
+            input_ids, draft_tokens, retrieve_indices, tree_mask, tree_position_ids, new_token = update_inference_inputs(
                 input_ids,
                 candidates,
                 best_candidate,
                 accept_length,
                 retrieve_indices,
                 logits_processor,
-                speculated_with_suffix,
                 new_token,
                 past_key_values_data,
                 current_length_data,

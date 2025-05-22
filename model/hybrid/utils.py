@@ -305,8 +305,23 @@ def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
         max_spec_factor=model.max_spec_factor,
         min_token_prob=model.min_token_prob
     )
-    speculated_with_suffix = result.score >= model.use_suffix_threshold
-    if speculated_with_suffix:
+    speculate_with_suffix = result.score >= model.use_suffix_threshold
+
+    print("speculated_with_suffix", speculate_with_suffix)
+    assert hasattr(model, "suffix_hidden_states"), "suffix_hidden_states not initialized"
+    if model.suffix_hidden_states is not None:
+        print(f"appending model.suffix_hidden_states ({model.suffix_hidden_states.shape}) to hidden_states ({hidden_states.shape})")
+        hidden_states = torch.cat((model.suffix_hidden_states, hidden_states), dim=-2)
+    if speculate_with_suffix:
+        model.suffix_hidden_states = hidden_states
+        print("setting model.suffix_hidden_states to", model.suffix_hidden_states.shape)
+    else:
+        model.suffix_hidden_states = None
+        print("clearing model.suffix_hidden_states to " , model.suffix_hidden_states)
+    assert hidden_states is not None, "hidden_states is None"
+
+
+    if speculate_with_suffix:
         draft_tokens = torch.tensor(result.token_ids, dtype=torch.int64, device=input_ids.device).unsqueeze(0)
         retrieve_indices = construct_retrieve_indices(result.token_ids, result.parents, input_ids.device)
         tree_mask = construct_tree_mask(result.parents, input_ids.device)
@@ -340,7 +355,7 @@ def hybrid_speculate(model, input_ids, hidden_states, logits_processor):
         print()
         
     
-    return speculated_with_suffix, draft_tokens, retrieve_indices, tree_mask, tree_position_ids
+    return draft_tokens, retrieve_indices, tree_mask, tree_position_ids
     
 
 def initialize_tree(input_ids, model, past_key_values, logits_processor):
@@ -365,9 +380,9 @@ def initialize_tree(input_ids, model, past_key_values, logits_processor):
             outputs["hidden_states"] = [x.to(ea_device) for x in outputs["hidden_states"]]
         hidden_states=torch.cat(outputs["hidden_states"],dim=-1)
     
-    speculated_with_suffix, draft_tokens, retrieve_indices,tree_mask,tree_position_ids = hybrid_speculate(model, input_ids, hidden_states, logits_processor)
+    draft_tokens, retrieve_indices,tree_mask,tree_position_ids = hybrid_speculate(model, input_ids, hidden_states, logits_processor)
     
-    return speculated_with_suffix, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, orig
+    return draft_tokens, retrieve_indices,tree_mask,tree_position_ids, orig
 
 
 def reset_tree_mode(
@@ -537,7 +552,6 @@ def update_inference_inputs(
         accept_length,
         retrieve_indices,
         logits_processor,
-        speculated_with_suffix,
         new_token,
         past_key_values_data_list,
         current_length_data,
@@ -593,25 +607,16 @@ def update_inference_inputs(
     # print("accept_length", accept_length.item())
     input_ids_new = torch.cat((input_ids, token.to(input_ids.device)), dim=1)
     print("input_ids_new: ", input_ids_new.shape)
-    print("model.suffix_hidden_states", (model.suffix_hidden_states or torch.tensor([])).shape)
-    print("speculated_with_suffix", speculated_with_suffix)
-    assert hasattr(model, "suffix_hidden_states"), "suffix_hidden_states not initialized"
-    if model.suffix_hidden_states is not None:
-        accept_hidden_state_new = torch.cat((model.suffix_hidden_states, accept_hidden_state_new), dim=-2)
-    if speculated_with_suffix:
-        model.suffix_hidden_states = accept_hidden_state_new
-        print("model.suffix_hidden_states", model.suffix_hidden_states.shape)
-    else:
-        model.suffix_hidden_states = None
-    assert accept_hidden_state_new is not None, "accept_hidden_state_new is None"
-    speculated_with_suffix, draft_tokens, retrieve_indices, tree_mask, tree_position_ids = hybrid_speculate(model, 
-                                                                                                            input_ids=input_ids_new,
-                                                                                                            hidden_states=accept_hidden_state_new,
-                                                                                                            logits_processor=logits_processor)
+    # print("model.suffix_hidden_states", (model.suffix_hidden_states or torch.tensor([])).shape)
+    
+    draft_tokens, retrieve_indices, tree_mask, tree_position_ids = hybrid_speculate(model, 
+                                                                                    input_ids=input_ids_new,
+                                                                                    hidden_states=accept_hidden_state_new,
+                                                                                    logits_processor=logits_processor)
 
     new_token += accept_length + 1
 
-    return speculated_with_suffix, input_ids, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, new_token
+    return input_ids, draft_tokens, retrieve_indices,tree_mask,tree_position_ids, new_token
 
 
 if __name__ == "__main__":
