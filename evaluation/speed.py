@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import os
 import sys
+import re
 
 def process_file(file_path):
     # Group stats by (question_id, category)
@@ -52,10 +53,13 @@ def common_prefix(strings):
 def clean_system_name(filename, file_prefix):
     # Remove prefix
     name = filename[len(file_prefix):] if filename.startswith(file_prefix) else filename
-    # Remove everything from first hyphen
-    hyphen_idx = name.find('-')
-    if hyphen_idx != -1:
-        name = name[:hyphen_idx]
+    match = re.search(r"(hybrid-\d+-)", name)
+    if match:
+        name = name[:match.end()-1]
+    else:
+        hyphen_idx = name.find('-')
+        if hyphen_idx != -1:
+            name = name[:hyphen_idx]
     # Remove .jsonl extension if present
     if name.endswith('.jsonl'):
         name = name[:-6]
