@@ -33,6 +33,7 @@ class HybridModel(nn.Module):
             depth,
             max_suffix_depth,
             training_file,
+            use_suffix_threshold,
             draft_num_candidate_tokens,
             max_spec_factor,
             min_token_prob,
@@ -55,7 +56,7 @@ class HybridModel(nn.Module):
         self.max_spec_factor = max_spec_factor
         self.min_token_prob = min_token_prob
         self.training_file = training_file
-        self.use_suffix_threshold = 3
+        self.use_suffix_threshold = use_suffix_threshold
         self._suffix_cache = SuffixCache(self.max_suffix_depth,
                                          self.training_file,
                                          self.tokenizer)
@@ -112,6 +113,7 @@ class HybridModel(nn.Module):
             depth=7,
             max_suffix_depth=60,
             training_file=None,
+            use_suffix_threshold=3,
             draft_num_candidate_tokens=10,
             max_spec_factor=2.0,
             min_token_prob=0.1,
@@ -160,6 +162,7 @@ class HybridModel(nn.Module):
             depth,
             max_suffix_depth,
             training_file,
+            use_suffix_threshold,
             draft_num_candidate_tokens,
             max_spec_factor,
             min_token_prob,

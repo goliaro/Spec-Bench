@@ -104,9 +104,10 @@ def get_model_answers(
             messages = [{"role": "user", "content": qs}]
             if "cortex" not in answer_file and "swebench" not in answer_file:
                 prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                inputs = tokenizer([prompt], return_tensors="pt", add_special_tokens=False).to("cuda")
             else:
                 prompt = qs
-            inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+                inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
             input_ids = inputs.input_ids
             try:
                 torch.cuda.synchronize()
@@ -174,11 +175,12 @@ def get_model_answers(
             for j in range(len(question["turns"])):
                 qs = question["turns"][j]
                 messages.append({"role": "user", "content": qs})
-                if "cortex" not in answer_file:
+                if "cortex" not in answer_file and "swebench" not in answer_file:
                     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                    inputs = tokenizer([prompt], return_tensors="pt", add_special_tokens=False).to("cuda")
                 else:
                     prompt = qs
-                inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+                    inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
                 input_ids = inputs.input_ids
                 try:
                     torch.cuda.synchronize()

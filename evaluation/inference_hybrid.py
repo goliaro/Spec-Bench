@@ -120,6 +120,12 @@ if __name__ == "__main__":
         default="",
         help="The partition of the dataset to use.",
     )
+    parser.add_argument(
+        "--use-suffix-threshold",
+        type=int,
+        default=3,
+        help="The minimum suffix speculation score to prefer it to EAGLE-3."
+    )
 
     args = parser.parse_args()
 
@@ -152,6 +158,7 @@ if __name__ == "__main__":
         depth=args.depth,
         max_suffix_depth=64,
         training_file=training_file,
+        use_suffix_threshold=args.use_suffix_threshold,
         top_k=args.top_k,
         torch_dtype=str_to_torch_dtype(args.dtype),
         low_cpu_mem_usage=True,
